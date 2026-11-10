@@ -1,963 +1,652 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>WhatsApp Legacy Database Viewer (2016 msgstore.db)</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        wa: {
-                            teal: '#075E54',
-                            lightTeal: '#128C7E',
-                            green: '#25D366',
-                            chatBg: '#efeae2',
-                            chatBgDark: '#0b141a',
-                            bubbleIn: '#ffffff',
-                            bubbleInDark: '#202c33',
-                            bubbleOut: '#d9fdd3',
-                            bubbleOutDark: '#005c4b',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- sql.js Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
-    <style>
-        /* Custom scrollbars */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 3px;
-        }
-        .dark ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-        }
-        
-        /* Dynamic iOS/Safari Height fixes */
-        .h-screen-ios {
-            height: 100vh;
-            height: -webkit-fill-available;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WhatsApp Legacy DB Viewer</title>
+  <!-- Load sql.js from reliable CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+  <style>
+    :root {
+      --wa-header: #075E54;
+      --wa-header-dark: #128C7E;
+      --wa-bg: #efeae2;
+      --wa-chat-bg: #0b141a;
+      --wa-bubble-in: #ffffff;
+      --wa-bubble-out: #dcf8c6;
+      --wa-bubble-in-dark: #202c33;
+      --wa-bubble-out-dark: #005c4b;
+      --wa-text: #111b21;
+      --wa-text-muted: #667781;
+      --wa-border: #e9edef;
+    }
 
-        /* Speech bubble directional tails */
-        .bubble-in::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: -8px;
-            width: 0;
-            height: 0;
-            border-top: 8px solid white;
-            border-left: 8px solid transparent;
-        }
-        .dark .bubble-in::before {
-            border-top-color: #202c33;
-        }
-        .bubble-out::after {
-            content: "";
-            position: absolute;
-            top: 0;
-            right: -8px;
-            width: 0;
-            height: 0;
-            border-top: 8px solid #d9fdd3;
-            border-right: 8px solid transparent;
-        }
-        .dark .bubble-out::after {
-            border-top-color: #005c4b;
-        }
+    [data-theme="dark"] {
+      --wa-bg: #0b141a;
+      --wa-bubble-in: var(--wa-bubble-in-dark);
+      --wa-bubble-out: var(--wa-bubble-out-dark);
+      --wa-text: #e9edef;
+      --wa-text-muted: #8696a0;
+      --wa-border: #222d34;
+    }
 
-        /* Disable zoom on tap for touch controls */
-        button, input, select {
-            touch-action: manipulation;
-        }
-    </style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    html, body { height: 100%; width: 100%; overflow: hidden; background-color: var(--wa-bg); color: var(--wa-text); }
+    
+    .app-container { display: flex; height: 100vh; width: 100vw; position: relative; }
+    
+    /* Header Bar */
+    .top-bar {
+      height: 60px;
+      background: var(--wa-header);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 10;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .top-bar h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .top-bar-actions { display: flex; gap: 10px; align-items: center; }
+
+    .btn {
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 18px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:active { background: rgba(255,255,255,0.3); }
+
+    /* Upload / Welcome Screen */
+    .welcome-screen {
+      position: absolute;
+      inset: 0;
+      background: var(--wa-bg);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+    .drop-zone {
+      border: 2px dashed #25D366;
+      border-radius: 16px;
+      padding: 40px 20px;
+      background: rgba(37, 211, 102, 0.05);
+      max-width: 480px;
+      width: 100%;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    .drop-zone icon { font-size: 48px; display: block; margin-bottom: 12px; }
+
+    /* Loading Modal & Diagnostics */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(11, 20, 26, 0.85);
+      color: white;
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .loading-card {
+      background: #1f2c34;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: #374248;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #25D366;
+      transition: width 0.2s;
+    }
+    .log-box {
+      background: #111b21;
+      border: 1px solid #2a3942;
+      border-radius: 6px;
+      height: 140px;
+      overflow-y: auto;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #00e676;
+      text-align: left;
+      margin-top: 12px;
+      white-space: pre-wrap;
+    }
+
+    /* Main WhatsApp Split View Layout */
+    .chat-layout { display: flex; width: 100%; height: calc(100vh - 60px); }
+    
+    .sidebar {
+      width: 350px;
+      background: var(--wa-bubble-in);
+      border-right: 1px solid var(--wa-border);
+      display: flex;
+      flex-direction: column;
+    }
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; }
+      .main-chat { display: none; width: 100%; }
+      .app-container.chat-selected .sidebar { display: none; }
+      .app-container.chat-selected .main-chat { display: flex; width: 100%; }
+    }
+
+    .search-box { padding: 10px; background: var(--wa-bg); border-bottom: 1px solid var(--wa-border); }
+    .search-box input {
+      width: 100%;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--wa-border);
+      background: var(--wa-bubble-in);
+      color: var(--wa-text);
+      outline: none;
+    }
+
+    .chat-list { flex: 1; overflow-y: auto; }
+    .chat-item {
+      display: flex;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--wa-border);
+      cursor: pointer;
+      align-items: center;
+      gap: 12px;
+    }
+    .chat-item:hover, .chat-item.active { background: rgba(0,0,0,0.05); }
+    .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #128C7E;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    .chat-info { flex: 1; min-width: 0; }
+    .chat-title-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .chat-name { font-weight: 600; font-size: 15px; color: var(--wa-text); truncate: ellipsis; overflow: hidden; white-space: nowrap; }
+    .chat-time { font-size: 12px; color: var(--wa-text-muted); }
+    .chat-last-msg { font-size: 13px; color: var(--wa-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Main Chat View */
+    .main-chat { flex: 1; display: flex; flex-direction: column; background: var(--wa-bg); }
+    .chat-header {
+      height: 56px;
+      padding: 0 16px;
+      background: var(--wa-bubble-in);
+      border-bottom: 1px solid var(--wa-border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .back-btn { display: none; background: none; border: none; font-size: 20px; color: var(--wa-text); cursor: pointer; }
+    @media (max-width: 768px) { .back-btn { display: block; } }
+
+    .message-area {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .msg-bubble {
+      max-width: 75%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14.5px;
+      line-height: 1.4;
+      position: relative;
+      word-wrap: break-word;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.08);
+    }
+    .msg-in { align-self: flex-start; background: var(--wa-bubble-in); border-top-left-radius: 0; }
+    .msg-out { align-self: flex-end; background: var(--wa-bubble-out); border-top-right-radius: 0; }
+    
+    .msg-meta {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--wa-text-muted);
+      margin-top: 2px;
+    }
+
+    .media-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      background: rgba(0,0,0,0.06);
+      border-radius: 4px;
+      font-style: italic;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+  </style>
 </head>
-<body class="h-screen-ios bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 flex flex-col font-sans overflow-hidden select-none">
+<body>
 
-    <!-- TOP APPLICATION HEADER -->
-    <header class="bg-wa-teal text-white h-14 flex items-center justify-between px-4 shrink-0 shadow-md z-30 pt-safe">
-        <div class="flex items-center space-x-3">
-            <i class="fa-brands fa-whatsapp text-2xl text-emerald-400"></i>
-            <h1 class="font-bold text-lg tracking-wide hidden sm:inline">WhatsApp DB Archive <span class="text-xs font-normal opacity-75">(2016 msgstore.db)</span></h1>
-            <h1 class="font-bold text-lg tracking-wide sm:hidden">WA Archive</h1>
-        </div>
-
-        <!-- Controls Header -->
-        <div class="flex items-center space-x-2 sm:space-x-3">
-            <div class="hidden lg:flex items-center text-xs bg-black/20 px-3 py-1 rounded-full text-emerald-200">
-                <i class="fa-solid fa-shield-halved mr-1.5 text-emerald-400"></i> 100% Client-Side & Private
-            </div>
-
-            <!-- Demo Data Loader -->
-            <button id="demoBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow transition flex items-center space-x-1">
-                <i class="fa-solid fa-vial"></i>
-                <span class="hidden sm:inline">Try Demo Data</span>
-            </button>
-
-            <!-- Light/Dark Theme Switcher -->
-            <button id="themeToggleBtn" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="Toggle Theme">
-                <i class="fa-solid fa-moon text-lg" id="themeIcon"></i>
-            </button>
-
-            <!-- Re-open File Button -->
-            <label id="uploadBtnHeader" class="hidden cursor-pointer bg-wa-lightTeal hover:bg-emerald-600 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow transition flex items-center space-x-1">
-                <i class="fa-solid fa-folder-open"></i>
-                <span class="hidden sm:inline">Open File</span>
-                <input type="file" id="dbFileInputHeader" accept=".db,.sqlite,.sqlite3" class="hidden">
-            </label>
-        </div>
-    </header>
-
-    <!-- MAIN APP WRAPPER -->
-    <div id="mainContainer" class="flex-1 flex relative overflow-hidden">
-
-        <!-- LANDING / FILE DROPZONE MODAL -->
-        <div id="dropzoneScreen" class="absolute inset-0 z-40 bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-4 sm:p-6 text-center overflow-y-auto">
-            <div class="max-w-xl w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 dark:border-gray-700 flex flex-col items-center">
-                <div class="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 dark:bg-emerald-900/40 rounded-full flex items-center justify-center mb-4 text-wa-lightTeal dark:text-emerald-400">
-                    <i class="fa-solid fa-database text-3xl sm:text-4xl"></i>
-                </div>
-
-                <h2 class="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white mb-2">WhatsApp Database Viewer</h2>
-                <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-md">
-                    Open unencrypted Android <code class="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-400">msgstore.db</code> databases (circa 2016). Supports English and Chinese (繁體 / 簡體中文).
-                </p>
-
-                <!-- Drag & Drop Zone -->
-                <div id="dropZone" class="w-full border-2 border-dashed border-emerald-400/60 dark:border-emerald-500/40 rounded-xl p-6 sm:p-8 bg-emerald-50/50 dark:bg-emerald-950/10 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 transition cursor-pointer flex flex-col items-center justify-center group mb-4">
-                    <i class="fa-solid fa-cloud-arrow-up text-3xl sm:text-4xl text-wa-lightTeal dark:text-emerald-400 group-hover:scale-110 transition-transform mb-2"></i>
-                    <p class="font-medium text-sm sm:text-base text-gray-700 dark:text-gray-200">Drag & Drop <span class="font-bold">msgstore.db</span> here</p>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">or tap to select file from iPad / storage</p>
-                    <input type="file" id="dbFileInput" accept=".db,.sqlite,.sqlite3" class="hidden">
-                </div>
-
-                <div class="flex items-center justify-between w-full mb-6">
-                    <hr class="w-full border-gray-200 dark:border-gray-700">
-                    <span class="px-3 text-xs text-gray-400 shrink-0 uppercase">or</span>
-                    <hr class="w-full border-gray-200 dark:border-gray-700">
-                </div>
-
-                <!-- Launch Sample Demo Data -->
-                <button id="loadDemoLandingBtn" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-lg shadow-sm transition flex items-center justify-center space-x-2 mb-6">
-                    <i class="fa-solid fa-play"></i>
-                    <span>Explore Demo Archive (English & 中文)</span>
-                </button>
-
-                <!-- Security Guarantee Card -->
-                <div class="flex items-start space-x-3 text-left bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 p-3.5 rounded-lg w-full">
-                    <i class="fa-solid fa-lock text-wa-lightTeal dark:text-emerald-400 text-base mt-0.5"></i>
-                    <div class="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed">
-                        <strong class="font-semibold block mb-0.5">Local iPad Privacy Notice:</strong>
-                        Your file is read strictly in WebAssembly memory on your iPad or computer using `sql.js`. No data is uploaded or transmitted outside your local browser context.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- SPINNER OVERLAY -->
-        <div id="loadingOverlay" class="hidden absolute inset-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm flex flex-col items-center justify-center">
-            <div class="relative flex items-center justify-center mb-4">
-                <div class="w-14 h-14 border-4 border-emerald-200 dark:border-emerald-900 border-t-wa-lightTeal dark:border-t-emerald-400 rounded-full animate-spin"></div>
-                <i class="fa-brands fa-whatsapp text-emerald-500 text-lg absolute"></i>
-            </div>
-            <h3 id="loadingText" class="font-semibold text-base text-gray-800 dark:text-gray-200">Initializing Engine...</h3>
-            <p id="loadingSubtext" class="text-xs text-gray-400 mt-1">Reading messages & contacts</p>
-        </div>
-
-        <!-- CONTACTS/CHAT LIST PANEL (LEFT COLUMN) -->
-        <aside id="chatListPanel" class="w-full md:w-80 lg:w-96 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-10 transition-transform duration-300 md:translate-x-0">
-            
-            <!-- Search & Filter Controls -->
-            <div class="p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                <div class="relative mb-2">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-sm"></i>
-                    <input type="text" id="searchContacts" placeholder="Search contact or phone..." 
-                        class="w-full pl-9 pr-8 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-wa-lightTeal text-gray-800 dark:text-gray-100 placeholder-gray-400">
-                    <button id="clearSearchBtn" class="hidden absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                        <i class="fa-solid fa-xmark text-sm"></i>
-                    </button>
-                </div>
-                
-                <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
-                    <span id="chatCountLabel">0 Chats Loaded</span>
-                    <button id="toggleGlobalSearchBtn" class="text-wa-lightTeal dark:text-emerald-400 font-medium hover:underline flex items-center space-x-1">
-                        <i class="fa-solid fa-message text-[10px]"></i>
-                        <span>Search All Messages</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Global Search Field (Hidden by default) -->
-            <div id="globalSearchContainer" class="hidden p-2.5 bg-emerald-50 dark:bg-gray-900 border-b border-emerald-200 dark:border-gray-700">
-                <div class="relative">
-                    <i class="fa-solid fa-font absolute left-3 top-2.5 text-emerald-600 dark:text-emerald-400 text-xs"></i>
-                    <input type="text" id="searchAllMessagesInput" placeholder="Search text in ALL messages..." 
-                        class="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-600 rounded-lg focus:outline-none focus:border-wa-lightTeal text-gray-800 dark:text-gray-100">
-                </div>
-            </div>
-
-            <!-- Chat Contacts Items -->
-            <div id="chatList" class="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/50">
-                <!-- Chat elements dynamically inserted here -->
-            </div>
-        </aside>
-
-        <!-- CHAT THREAD VIEW (RIGHT COLUMN) -->
-        <main id="chatThreadPanel" class="flex-1 bg-wa-chatBg dark:bg-wa-chatBgDark flex flex-col h-full absolute inset-0 md:relative md:inset-auto transform translate-x-full md:translate-x-0 transition-transform duration-300 z-20 md:z-auto">
-            
-            <!-- Active Thread Header -->
-            <header id="threadHeader" class="hidden bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 px-4 flex items-center justify-between shrink-0 shadow-sm">
-                <div class="flex items-center space-x-3">
-                    <!-- iPad / Mobile Back Button -->
-                    <button id="backToChatsBtn" class="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 focus:outline-none">
-                        <i class="fa-solid fa-arrow-left text-lg"></i>
-                    </button>
-
-                    <!-- User Avatar -->
-                    <div id="threadAvatar" class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-base shrink-0">
-                        ?
-                    </div>
-
-                    <!-- Title & Details -->
-                    <div class="min-w-0">
-                        <h2 id="threadTitle" class="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">Select a chat</h2>
-                        <p id="threadSubtitle" class="text-xs text-gray-500 dark:text-gray-400 truncate">JID Information</p>
-                    </div>
-                </div>
-
-                <!-- In-Chat Search Bar -->
-                <div class="flex items-center space-x-2">
-                    <div class="relative">
-                        <input type="text" id="inChatSearchInput" placeholder="Filter this chat..." 
-                            class="w-32 sm:w-48 lg:w-56 pl-8 pr-3 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:border-wa-lightTeal text-gray-800 dark:text-gray-100">
-                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-gray-400 text-xs"></i>
-                    </div>
-                </div>
-            </header>
-
-            <!-- Blank Slate (No Conversation Selected) -->
-            <div id="blankState" class="flex-1 flex flex-col items-center justify-center p-6 text-center bg-wa-chatBg dark:bg-wa-chatBgDark">
-                <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gray-200/60 dark:bg-gray-800 flex items-center justify-center mb-4 text-gray-400 dark:text-gray-600">
-                    <i class="fa-brands fa-whatsapp text-5xl sm:text-6xl"></i>
-                </div>
-                <h3 class="text-lg sm:text-xl font-semibold text-gray-700 dark:text-gray-300 mb-1">WhatsApp Web Archive</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">Select a contact or group on the left to read messages and media attachments.</p>
-            </div>
-
-            <!-- Messages Stream -->
-            <div id="messagesContainer" class="hidden flex-1 overflow-y-auto p-4 space-y-3">
-                <!-- Messages dynamic container -->
-            </div>
-
-            <!-- Archive Footer -->
-            <footer id="threadFooter" class="hidden bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2.5 text-center text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                <i class="fa-solid fa-lock text-[10px] mr-1 text-emerald-600 dark:text-emerald-400"></i> Read-only archive mode.
-            </footer>
-        </main>
+<div class="app-container" id="app">
+  <!-- Top Navigation Header -->
+  <div class="top-bar" style="position: absolute; top:0; left:0; right:0;">
+    <h1>💬 WhatsApp Archive Reader</h1>
+    <div class="top-bar-actions">
+      <button class="btn" onclick="toggleTheme()">🌓 Theme</button>
+      <button class="btn" onclick="resetApp()">📁 Open DB</button>
     </div>
+  </div>
 
-    <!-- APPLICATION LOGIC -->
-    <script>
-        // Global State
-        let dbInstance = null;
-        let chatsData = [];
-        let messagesCache = {};
-        let activeJid = null;
-        let SQL = null;
+  <!-- Welcome / Dropzone Screen -->
+  <div class="welcome-screen" id="welcomeScreen" style="top: 60px;">
+    <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+      <div style="font-size: 40px; margin-bottom: 10px;">📂</div>
+      <h3>Select <code>msgstore.db</code> File</h3>
+      <p style="font-size: 13px; color: var(--wa-text-muted); margin-top: 8px;">
+        Tap here to select your unencrypted 2016 WhatsApp database from iPad files.
+      </p>
+      <input type="file" id="fileInput" accept=".db,.sqlite,.sqlite3" style="display:none" onchange="handleFileSelect(event)">
+    </div>
+    <button class="btn" style="background: #128C7E; padding: 10px 20px;" onclick="loadDemoData()">⚡ Try Demo Messages (English &amp; 繁體中文)</button>
+  </div>
 
-        // UI DOM Handles
-        const dropZone = document.getElementById('dropZone');
-        const dbFileInput = document.getElementById('dbFileInput');
-        const dbFileInputHeader = document.getElementById('dbFileInputHeader');
-        const dropzoneScreen = document.getElementById('dropzoneScreen');
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        const loadingText = document.getElementById('loadingText');
-        const loadingSubtext = document.getElementById('loadingSubtext');
-        const chatList = document.getElementById('chatList');
-        const searchContacts = document.getElementById('searchContacts');
-        const clearSearchBtn = document.getElementById('clearSearchBtn');
-        const chatCountLabel = document.getElementById('chatCountLabel');
-        const chatListPanel = document.getElementById('chatListPanel');
-        const chatThreadPanel = document.getElementById('chatThreadPanel');
-        const backToChatsBtn = document.getElementById('backToChatsBtn');
-        const blankState = document.getElementById('blankState');
-        const threadHeader = document.getElementById('threadHeader');
-        const threadFooter = document.getElementById('threadFooter');
-        const messagesContainer = document.getElementById('messagesContainer');
-        const threadTitle = document.getElementById('threadTitle');
-        const threadSubtitle = document.getElementById('threadSubtitle');
-        const threadAvatar = document.getElementById('threadAvatar');
-        const inChatSearchInput = document.getElementById('inChatSearchInput');
-        const themeToggleBtn = document.getElementById('themeToggleBtn');
-        const themeIcon = document.getElementById('themeIcon');
-        const uploadBtnHeader = document.getElementById('uploadBtnHeader');
-        const demoBtn = document.getElementById('demoBtn');
-        const loadDemoLandingBtn = document.getElementById('loadDemoLandingBtn');
-        const toggleGlobalSearchBtn = document.getElementById('toggleGlobalSearchBtn');
-        const globalSearchContainer = document.getElementById('globalSearchContainer');
-        const searchAllMessagesInput = document.getElementById('searchAllMessagesInput');
+  <!-- Loading & Diagnostics Modal -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-card">
+      <h3 id="loadStatusTitle">Initializing WASM Engine...</h3>
+      <p id="loadStatusSub" style="font-size: 13px; color: #8696a0; margin-top: 4px;">Loading SQLite dependencies</p>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="log-box" id="debugLog">Initializing diagnostic log...</div>
+      <button class="btn" id="cancelBtn" style="margin-top: 12px; background: #d32f2f; display: none;" onclick="resetApp()">Dismiss / Reset</button>
+    </div>
+  </div>
 
-        // Dark Theme System Initializer
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
-            themeIcon.classList.replace('fa-moon', 'fa-sun');
-        }
+  <!-- Main Chat Workspace -->
+  <div class="chat-layout" style="margin-top: 60px;" id="mainWorkspace">
+    <div class="sidebar">
+      <div class="search-box">
+        <input type="text" id="contactSearch" placeholder="Search contacts..." oninput="filterContacts()">
+      </div>
+      <div class="chat-list" id="chatList"></div>
+    </div>
+    
+    <div class="main-chat">
+      <div class="chat-header">
+        <button class="back-btn" onclick="closeChat()">←</button>
+        <div class="avatar" id="activeAvatar">?</div>
+        <div>
+          <div class="chat-name" id="activeTitle">Select a conversation</div>
+          <div style="font-size: 12px; color: var(--wa-text-muted);" id="activeSubtitle">WhatsApp Legacy DB</div>
+        </div>
+      </div>
+      
+      <div class="message-area" id="messageArea">
+        <div style="text-align: center; color: var(--wa-text-muted); margin-top: 40px;">
+          Select a chat from the left panel to display messages.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-        themeToggleBtn.addEventListener('click', () => {
-            document.documentElement.classList.toggle('dark');
-            if (document.documentElement.classList.contains('dark')) {
-                themeIcon.classList.replace('fa-moon', 'fa-sun');
-            } else {
-                themeIcon.classList.replace('fa-sun', 'fa-moon');
-            }
+<script>
+  let SQL = null;
+  let db = null;
+  let loadedChats = [];
+  let activeJid = null;
+
+  function log(msg) {
+    const box = document.getElementById('debugLog');
+    box.innerText += '\n' + `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function updateProgress(percent, title, subtitle) {
+    document.getElementById('progressFill').style.width = percent + '%';
+    if(title) document.getElementById('loadStatusTitle').innerText = title;
+    if(subtitle) document.getElementById('loadStatusSub').innerText = subtitle;
+  }
+
+  function showLoading(show) {
+    document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+  }
+
+  // Initialize SQLite WebAssembly Engine
+  async function initSql() {
+    if (SQL) return true;
+    showLoading(true);
+    updateProgress(15, "Loading SQLite Engine", "Downloading WebAssembly binary...");
+    log("Fetching sql-wasm.wasm module...");
+    try {
+      SQL = await initSqlJs({
+        locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+      });
+      log("SQLite WebAssembly initialized successfully.");
+      updateProgress(30, "Engine Ready", "Awaiting database file selection.");
+      return true;
+    } catch (err) {
+      log("ERROR initializing SQLite: " + err.message);
+      document.getElementById('cancelBtn').style.display = 'block';
+      updateProgress(0, "Initialization Failed", err.message);
+      return false;
+    }
+  }
+
+  async function handleFileSelect(evt) {
+    const file = evt.target.files[0];
+    if (!file) return;
+
+    showLoading(true);
+    document.getElementById('cancelBtn').style.display = 'none';
+    log(`File selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    const ready = await initSql();
+    if (!ready) return;
+
+    updateProgress(45, "Reading File", "Loading file buffer into RAM...");
+    log("Reading file buffer...");
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        updateProgress(70, "Parsing Database", "Initializing SQLite instance...");
+        log("Parsing binary SQLite array buffer...");
+        const Uints = new Uint8Array(e.target.result);
+        
+        if (db) db.close();
+        db = new SQL.Database(Uints);
+        log("SQLite database opened successfully.");
+
+        updateProgress(85, "Querying Messages", "Detecting schema and extracting chats...");
+        parseDatabase();
+      } catch (err) {
+        log("FATAL ERROR parsing DB: " + err.message);
+        updateProgress(0, "Database Parse Error", "Is the file unencrypted?");
+        document.getElementById('cancelBtn').style.display = 'block';
+      }
+    };
+    reader.onerror = function() {
+      log("FileReader error occurred.");
+      updateProgress(0, "File Read Error", "Failed to read local file.");
+      document.getElementById('cancelBtn').style.display = 'block';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function parseDatabase() {
+    try {
+      // Inspect SQLite Schema
+      log("Inspecting database tables...");
+      const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table';");
+      const tables = tablesRes.length ? tablesRes[0].values.map(v => v[0]) : [];
+      log("Found tables: " + tables.join(', '));
+
+      if (!tables.includes('messages')) {
+        throw new Error("Invalid WhatsApp database: 'messages' table not found.");
+      }
+
+      // Detect available columns in messages table
+      const colsRes = db.exec("PRAGMA table_info(messages);");
+      const msgCols = colsRes[0].values.map(v => v[1]);
+      log("Messages columns: " + msgCols.join(', '));
+
+      const jidCol = msgCols.includes('key_remote_jid') ? 'key_remote_jid' : 'jid';
+      const textCol = msgCols.includes('data') ? 'data' : (msgCols.includes('text_data') ? 'text_data' : 'data');
+      const timeCol = msgCols.includes('timestamp') ? 'timestamp' : 'creation_timestamp';
+      const fromMeCol = msgCols.includes('key_from_me') ? 'key_from_me' : 'from_me';
+
+      log(`Using mappings: JID=${jidCol}, Text=${textCol}, Timestamp=${timeCol}`);
+
+      // Query Chat Summary
+      const query = `
+        SELECT 
+          ${jidCol} as jid,
+          MAX(${timeCol}) as last_time,
+          ${textCol} as last_msg,
+          COUNT(*) as msg_count
+        FROM messages 
+        WHERE ${jidCol} IS NOT NULL AND ${jidCol} != ''
+        GROUP BY ${jidCol}
+        ORDER BY last_time DESC;
+      `;
+
+      log("Executing chat list query...");
+      const res = db.exec(query);
+      
+      loadedChats = [];
+      if (res.length > 0) {
+        loadedChats = res[0].values.map(row => {
+          const rawJid = row[0] || '';
+          const name = formatJidName(rawJid);
+          return {
+            jid: rawJid,
+            name: name,
+            timestamp: row[1],
+            lastMsg: row[2] || '[Media / Attachment]',
+            count: row[3]
+          };
         });
-
-        // Initialize sql.js WebAssembly
-        async function initSqlJsEngine() {
-            if (SQL) return SQL;
-            try {
-                SQL = await initSqlJs({
-                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-                });
-                return SQL;
-            } catch (err) {
-                console.error("SQL.js initialization error:", err);
-                alert("Could not load SQL WebAssembly parser. Ensure internet connection for initial CDN load.");
-            }
-        }
-
-        // File Selection Listener Events
-        dropZone.addEventListener('click', () => dbFileInput.click());
-        dbFileInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
-        dbFileInputHeader.addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('bg-emerald-100', 'dark:bg-emerald-900/40');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('bg-emerald-100', 'dark:bg-emerald-900/40');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('bg-emerald-100', 'dark:bg-emerald-900/40');
-            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                handleFileSelect(e.dataTransfer.files[0]);
-            }
-        });
-
-        // Demo Data Triggers
-        demoBtn.addEventListener('click', loadDemoData);
-        loadDemoLandingBtn.addEventListener('click', loadDemoData);
-
-        // Process Input Database File
-        async function handleFileSelect(file) {
-            if (!file) return;
-
-            showLoading("Initializing SQLite Engine...", "Preparing WebAssembly parser");
-            const sqlEngine = await initSqlJsEngine();
-
-            showLoading("Reading File Memory...", "Loading database file");
-            const reader = new FileReader();
-
-            reader.onload = function () {
-                try {
-                    const Uints = new Uint8Array(reader.result);
-                    dbInstance = new sqlEngine.Database(Uints);
-                    
-                    showLoading("Analyzing Database...", "Extracting contacts & messages");
-                    setTimeout(() => {
-                        parseWhatsAppDatabase();
-                        dropzoneScreen.classList.add('hidden');
-                        uploadBtnHeader.classList.remove('hidden');
-                        hideLoading();
-                    }, 150);
-
-                } catch (err) {
-                    console.error(err);
-                    hideLoading();
-                    alert("Unable to read SQLite database file. Ensure the file is an unencrypted msgstore.db.");
-                }
-            };
-
-            reader.readAsArrayBuffer(file);
-        }
-
-        function showLoading(msg, subtext = "") {
-            loadingText.innerText = msg;
-            loadingSubtext.innerText = subtext;
-            loadingOverlay.classList.remove('hidden');
-        }
-
-        function hideLoading() {
-            loadingOverlay.classList.add('hidden');
-        }
-
-        // 2016 Legacy Database Query Engine
-        function parseWhatsAppDatabase() {
-            chatsData = [];
-            messagesCache = {};
-
-            if (!dbInstance) return;
-
-            // Step 1: Detect available database tables
-            const tablesRes = dbInstance.exec("SELECT name FROM sqlite_master WHERE type='table';");
-            const tables = tablesRes.length > 0 ? tablesRes[0].values.map(row => row[0]) : [];
-
-            const hasChatList = tables.includes('chat_list');
-            const hasChat = tables.includes('chat');
-            const hasMessages = tables.includes('messages');
-
-            if (!hasMessages) {
-                alert("Invalid Database: 'messages' table missing.");
-                return;
-            }
-
-            // Step 2: Extract JIDs (Contacts & Groups)
-            let jidQuery = "";
-            if (hasChatList) {
-                jidQuery = "SELECT key_remote_jid, subject, creation FROM chat_list ORDER BY creation DESC";
-            } else if (hasChat) {
-                jidQuery = "SELECT jid as key_remote_jid, subject, created_timestamp_ms as creation FROM chat";
-            } else {
-                jidQuery = "SELECT DISTINCT key_remote_jid, NULL as subject, MAX(timestamp) as creation FROM messages GROUP BY key_remote_jid ORDER BY creation DESC";
-            }
-
-            let chatMap = new Map();
-            try {
-                const jidStmt = dbInstance.prepare(jidQuery);
-                while (jidStmt.step()) {
-                    const row = jidStmt.getAsObject();
-                    const jid = row.key_remote_jid;
-                    if (jid && jid !== 'status@broadcast') {
-                        chatMap.set(jid, {
-                            jid: jid,
-                            name: row.subject || formatJidToDisplayName(jid),
-                            lastMessage: '',
-                            lastTimestamp: 0
-                        });
-                    }
-                }
-                jidStmt.free();
-            } catch (e) {
-                console.warn("Falling back to raw DISTINCT message JID extraction:", e);
-                const fallbackStmt = dbInstance.prepare("SELECT DISTINCT key_remote_jid FROM messages");
-                while (fallbackStmt.step()) {
-                    const row = fallbackStmt.getAsObject();
-                    const jid = row.key_remote_jid;
-                    if (jid && jid !== 'status@broadcast') {
-                        chatMap.set(jid, {
-                            jid: jid,
-                            name: formatJidToDisplayName(jid),
-                            lastMessage: '',
-                            lastTimestamp: 0
-                        });
-                    }
-                }
-                fallbackStmt.free();
-            }
-
-            // Step 3: Populate last message snippet for list rendering
-            chatMap.forEach((chat, jid) => {
-                try {
-                    const lastMsgStmt = dbInstance.prepare(`
-                        SELECT data, timestamp, media_wa_type, media_caption 
-                        FROM messages 
-                        WHERE key_remote_jid = :jid 
-                        ORDER BY timestamp DESC LIMIT 1
-                    `);
-                    lastMsgStmt.bind({ ':jid': jid });
-                    if (lastMsgStmt.step()) {
-                        const msgRow = lastMsgStmt.getAsObject();
-                        chat.lastTimestamp = msgRow.timestamp || 0;
-                        chat.lastMessage = getMessageSnippet(msgRow.data, msgRow.media_wa_type, msgRow.media_caption);
-                    }
-                    lastMsgStmt.free();
-                } catch (err) {
-                    console.warn(`Error getting last message for ${jid}:`, err);
-                }
-            });
-
-            // Order by timestamp descending
-            chatsData = Array.from(chatMap.values()).sort((a, b) => b.lastTimestamp - a.lastTimestamp);
-            chatCountLabel.innerText = `${chatsData.length} Chats Found`;
-            renderChatList(chatsData);
-        }
-
-        // Helper: Convert JID string into clean readable title
-        function formatJidToDisplayName(jid) {
-            if (!jid) return "Unknown Contact";
-            if (jid.endsWith('@g.us')) {
-                const groupId = jid.split('@')[0];
-                return `Group Chat (${groupId.slice(-4)})`;
-            }
-            const phone = jid.split('@')[0];
-            if (/^\d+$/.test(phone)) {
-                return `+${phone}`;
-            }
-            return phone;
-        }
-
-        // Helper: Formatter for Chat List snippet
-        function getMessageSnippet(data, mediaType, caption) {
-            if (mediaType == 1 || mediaType == '1') return caption ? `📷 ${caption}` : "📷 [Photo]";
-            if (mediaType == 2 || mediaType == '2') return "🎵 [Voice Note / Audio]";
-            if (mediaType == 3 || mediaType == '3') return caption ? `🎥 ${caption}` : "🎥 [Video]";
-            if (mediaType == 4 || mediaType == '4') return "👤 [Contact Card]";
-            if (mediaType == 5 || mediaType == '5') return "📍 [Location]";
-            if (!data) return "Media item";
-            return data;
-        }
-
-        // Render Left Navigation List
-        function renderChatList(chats) {
-            chatList.innerHTML = '';
-
-            if (chats.length === 0) {
-                chatList.innerHTML = `
-                    <div class="p-6 text-center text-gray-400 text-xs">
-                        No conversations found matching search.
-                    </div>
-                `;
-                return;
-            }
-
-            chats.forEach(chat => {
-                const isGroup = chat.jid.endsWith('@g.us');
-                const avatarBg = isGroup ? 'bg-indigo-600' : 'bg-emerald-600';
-                const avatarIcon = isGroup ? '<i class="fa-solid fa-users text-xs"></i>' : chat.name.charAt(0).toUpperCase();
-
-                const item = document.createElement('div');
-                item.className = `chat-item flex items-center px-3.5 py-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition border-b border-gray-100 dark:border-gray-700/30 ${activeJid === chat.jid ? 'bg-gray-200 dark:bg-gray-700' : ''}`;
-                item.setAttribute('data-jid', chat.jid);
-
-                const timeFormatted = chat.lastTimestamp ? formatDateOrTime(chat.lastTimestamp) : '';
-
-                item.innerHTML = `
-                    <div class="w-11 h-11 rounded-full ${avatarBg} text-white flex items-center justify-center font-bold text-sm mr-3 shrink-0 shadow-sm">
-                        ${avatarIcon}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex justify-between items-baseline mb-0.5">
-                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white truncate">${escapeHtml(chat.name)}</h3>
-                            <span class="text-[10px] text-gray-400 shrink-0 ml-2">${timeFormatted}</span>
-                        </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate leading-snug">${escapeHtml(chat.lastMessage || '')}</p>
-                    </div>
-                `;
-
-                item.addEventListener('click', () => selectChatThread(chat));
-                chatList.appendChild(item);
-            });
-        }
-
-        // Active Chat Selection Handler
-        function selectChatThread(chat) {
-            activeJid = chat.jid;
-
-            // Update Highlighted Item
-            document.querySelectorAll('.chat-item').forEach(el => {
-                if (el.getAttribute('data-jid') === activeJid) {
-                    el.classList.add('bg-gray-200', 'dark:bg-gray-700');
-                } else {
-                    el.classList.remove('bg-gray-200', 'dark:bg-gray-700');
-                }
-            });
-
-            // Header state updates
-            threadTitle.innerText = chat.name;
-            threadSubtitle.innerText = chat.jid;
-            const isGroup = chat.jid.endsWith('@g.us');
-            threadAvatar.className = `w-10 h-10 rounded-full ${isGroup ? 'bg-indigo-600' : 'bg-emerald-600'} text-white flex items-center justify-center font-bold text-sm shrink-0`;
-            threadAvatar.innerHTML = isGroup ? '<i class="fa-solid fa-users text-xs"></i>' : chat.name.charAt(0).toUpperCase();
-
-            // iPad portrait sliding drawer behavior
-            chatThreadPanel.classList.remove('translate-x-full');
-
-            blankState.classList.add('hidden');
-            threadHeader.classList.remove('hidden');
-            threadFooter.classList.remove('hidden');
-            messagesContainer.classList.remove('hidden');
-
-            loadMessagesForJid(chat.jid);
-        }
-
-        // Fetch Messages for JID
-        function loadMessagesForJid(jid) {
-            messagesContainer.innerHTML = '';
-            inChatSearchInput.value = '';
-
-            if (messagesCache[jid]) {
-                renderMessages(messagesCache[jid]);
-                return;
-            }
-
-            // Demo Mode fallback cache handler
-            if (jid.startsWith('demo_')) {
-                return; 
-            }
-
-            try {
-                const stmt = dbInstance.prepare(`
-                    SELECT 
-                        _id, key_remote_jid, key_from_me, data, timestamp, 
-                        media_wa_type, media_caption, media_name, media_url, media_size, status
-                    FROM messages 
-                    WHERE key_remote_jid = :jid 
-                    ORDER BY timestamp ASC
-                `);
-                stmt.bind({ ':jid': jid });
-
-                const msgs = [];
-                while (stmt.step()) {
-                    msgs.push(stmt.getAsObject());
-                }
-                stmt.free();
-
-                messagesCache[jid] = msgs;
-                renderMessages(msgs);
-
-            } catch (err) {
-                console.error("Query messages error:", err);
-                messagesContainer.innerHTML = `<div class="p-4 text-center text-red-500 text-xs">Error parsing messages for this conversation.</div>`;
-            }
-        }
-
-        // Render Chat Bubble Stream
-        function renderMessages(msgs) {
-            messagesContainer.innerHTML = '';
-
-            if (!msgs || msgs.length === 0) {
-                messagesContainer.innerHTML = `
-                    <div class="flex items-center justify-center h-full">
-                        <span class="bg-white/80 dark:bg-gray-800/80 text-gray-500 text-xs px-3 py-1.5 rounded-lg shadow-sm">
-                            No messages found.
-                        </span>
-                    </div>
-                `;
-                return;
-            }
-
-            let currentDateStr = '';
-
-            msgs.forEach(msg => {
-                const msgDate = new Date(msg.timestamp);
-                const dateHeaderStr = formatDateDivider(msgDate);
-
-                // Date separator badge
-                if (dateHeaderStr !== currentDateStr) {
-                    currentDateStr = dateHeaderStr;
-                    const divider = document.createElement('div');
-                    divider.className = 'flex justify-center my-3 sticky top-1 z-10';
-                    divider.innerHTML = `
-                        <span class="bg-white/90 dark:bg-gray-800/90 text-gray-600 dark:text-gray-300 text-[10px] font-medium px-3 py-1 rounded-md shadow-sm border border-gray-200/50 dark:border-gray-700/50 uppercase tracking-wider">
-                            ${dateHeaderStr}
-                        </span>
-                    `;
-                    messagesContainer.appendChild(divider);
-                }
-
-                // Bubble Container
-                const isFromMe = msg.key_from_me === 1 || msg.key_from_me === '1';
-                const bubbleWrapper = document.createElement('div');
-                bubbleWrapper.className = `flex ${isFromMe ? 'justify-end' : 'justify-start'} mb-2`;
-
-                const timeStr = formatTimeOnly(msg.timestamp);
-                const bubbleClass = isFromMe 
-                    ? 'bg-wa-bubbleOut dark:bg-wa-bubbleOutDark text-gray-900 dark:text-gray-100 bubble-out' 
-                    : 'bg-wa-bubbleIn dark:bg-wa-bubbleInDark text-gray-900 dark:text-gray-100 bubble-in';
-
-                // Content Parser for legacy WhatsApp media_wa_type
-                let contentHtml = '';
-                const mediaType = msg.media_wa_type;
-
-                if (mediaType == 1 || mediaType == '1') {
-                    contentHtml = `
-                        <div class="flex items-center space-x-2.5 bg-black/5 dark:bg-white/5 p-2 rounded mb-1 border border-black/5 dark:border-white/5">
-                            <i class="fa-solid fa-image text-emerald-600 dark:text-emerald-400 text-xl"></i>
-                            <div class="text-xs">
-                                <p class="font-medium text-gray-800 dark:text-gray-200">Photo Attachment</p>
-                                <p class="text-[10px] opacity-75">${msg.media_name || 'Legacy Image'}</p>
-                            </div>
-                        </div>
-                        ${msg.media_caption ? `<p class="text-sm mt-1 whitespace-pre-wrap">${escapeHtml(msg.media_caption)}</p>` : ''}
-                    `;
-                } else if (mediaType == 2 || mediaType == '2') {
-                    contentHtml = `
-                        <div class="flex items-center space-x-3 bg-black/5 dark:bg-white/5 p-2 rounded mb-1 border border-black/5 dark:border-white/5">
-                            <i class="fa-solid fa-microphone text-emerald-600 dark:text-emerald-400 text-lg"></i>
-                            <div class="text-xs">
-                                <p class="font-medium text-gray-800 dark:text-gray-200">Voice Note / Audio</p>
-                                <p class="text-[10px] opacity-75">${msg.media_size ? Math.round(msg.media_size / 1024) + ' KB' : 'Audio note'}</p>
-                            </div>
-                        </div>
-                    `;
-                } else if (mediaType == 3 || mediaType == '3') {
-                    contentHtml = `
-                        <div class="flex items-center space-x-2.5 bg-black/5 dark:bg-white/5 p-2 rounded mb-1 border border-black/5 dark:border-white/5">
-                            <i class="fa-solid fa-video text-emerald-600 dark:text-emerald-400 text-lg"></i>
-                            <div class="text-xs">
-                                <p class="font-medium text-gray-800 dark:text-gray-200">Video File</p>
-                            </div>
-                        </div>
-                        ${msg.media_caption ? `<p class="text-sm mt-1 whitespace-pre-wrap">${escapeHtml(msg.media_caption)}</p>` : ''}
-                    `;
-                } else if (mediaType == 4 || mediaType == '4') {
-                    contentHtml = `
-                        <div class="flex items-center space-x-2.5 bg-black/5 dark:bg-white/5 p-2 rounded border border-black/5 dark:border-white/5">
-                            <i class="fa-solid fa-address-card text-emerald-600 dark:text-emerald-400 text-xl"></i>
-                            <span class="text-xs font-medium">Shared Contact Card</span>
-                        </div>
-                    `;
-                } else if (mediaType == 5 || mediaType == '5') {
-                    contentHtml = `
-                        <div class="flex items-center space-x-2.5 bg-black/5 dark:bg-white/5 p-2 rounded border border-black/5 dark:border-white/5">
-                            <i class="fa-solid fa-location-dot text-red-500 text-lg"></i>
-                            <span class="text-xs font-medium">Location Pin</span>
-                        </div>
-                    `;
-                } else {
-                    // Regular text supporting mixed English and Traditional/Simplified Chinese
-                    contentHtml = `<p class="text-sm whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(msg.data || '')}</p>`;
-                }
-
-                const ticksHtml = isFromMe 
-                    ? `<span class="ml-1 text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-check-double text-[10px]"></i></span>` 
-                    : '';
-
-                bubbleWrapper.innerHTML = `
-                    <div class="relative max-w-[85%] sm:max-w-[70%] px-3 py-1.5 rounded-lg shadow-sm ${bubbleClass}">
-                        ${contentHtml}
-                        <div class="flex items-center justify-end space-x-1 mt-0.5 -mr-0.5 text-[10px] opacity-65 leading-none">
-                            <span>${timeStr}</span>
-                            ${ticksHtml}
-                        </div>
-                    </div>
-                `;
-
-                messagesContainer.appendChild(bubbleWrapper);
-            });
-
-            // Smooth scroll to bottom
-            setTimeout(() => {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 50);
-        }
-
-        // Contact List Search Filter
-        searchContacts.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase().trim();
-            if (query.length > 0) {
-                clearSearchBtn.classList.remove('hidden');
-            } else {
-                clearSearchBtn.classList.add('hidden');
-            }
-
-            const filtered = chatsData.filter(chat => 
-                chat.name.toLowerCase().includes(query) || 
-                chat.jid.toLowerCase().includes(query) ||
-                (chat.lastMessage && chat.lastMessage.toLowerCase().includes(query))
-            );
-            renderChatList(filtered);
-        });
-
-        clearSearchBtn.addEventListener('click', () => {
-            searchContacts.value = '';
-            clearSearchBtn.classList.add('hidden');
-            renderChatList(chatsData);
-        });
-
-        // Toggle Global Search Input
-        toggleGlobalSearchBtn.addEventListener('click', () => {
-            globalSearchContainer.classList.toggle('hidden');
-            if (!globalSearchContainer.classList.contains('hidden')) {
-                searchAllMessagesInput.focus();
-            }
-        });
-
-        // Search Content in ALL Messages
-        searchAllMessagesInput.addEventListener('input', (e) => {
-            const query = e.target.value.trim().toLowerCase();
-            if (!query || query.length < 2) {
-                renderChatList(chatsData);
-                return;
-            }
-
-            if (dbInstance) {
-                try {
-                    const searchStmt = dbInstance.prepare(`
-                        SELECT DISTINCT key_remote_jid 
-                        FROM messages 
-                        WHERE data LIKE :q OR media_caption LIKE :q
-                        LIMIT 50
-                    `);
-                    searchStmt.bind({ ':q': `%${query}%` });
-
-                    const matchingJids = new Set();
-                    while (searchStmt.step()) {
-                        matchingJids.add(searchStmt.getAsObject().key_remote_jid);
-                    }
-                    searchStmt.free();
-
-                    const matchedChats = chatsData.filter(c => matchingJids.has(c.jid));
-                    renderChatList(matchedChats);
-                    return;
-                } catch (err) {
-                    console.error("Global search error:", err);
-                }
-            }
-
-            // Fallback for Demo Mode global search
-            const matchedChats = chatsData.filter(c => {
-                const cached = messagesCache[c.jid] || [];
-                return cached.some(m => (m.data && m.data.toLowerCase().includes(query)) || (m.media_caption && m.media_caption.toLowerCase().includes(query)));
-            });
-            renderChatList(matchedChats);
-        });
-
-        // Active Thread In-Chat Filter
-        inChatSearchInput.addEventListener('input', (e) => {
-            const query = e.target.value.trim().toLowerCase();
-            if (!activeJid || !messagesCache[activeJid]) return;
-
-            const allMsgs = messagesCache[activeJid];
-            if (!query) {
-                renderMessages(allMsgs);
-                return;
-            }
-
-            const filteredMsgs = allMsgs.filter(m => 
-                (m.data && m.data.toLowerCase().includes(query)) ||
-                (m.media_caption && m.media_caption.toLowerCase().includes(query))
-            );
-            renderMessages(filteredMsgs);
-        });
-
-        // Mobile/iPad Navigation Back Button
-        backToChatsBtn.addEventListener('click', () => {
-            chatThreadPanel.classList.add('translate-x-full');
-            activeJid = null;
-            document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('bg-gray-200', 'dark:bg-gray-700'));
-        });
-
-        // Built-in Demo Data Initializer (English & Chinese Support Demo)
-        function loadDemoData() {
-            showLoading("Loading Demo Data...", "Preparing preview environment");
-
-            setTimeout(() => {
-                const now = Date.now();
-                const dayMs = 86400000;
-
-                chatsData = [
-                    {
-                        jid: 'demo_1@s.whatsapp.net',
-                        name: 'David Wong (黃先生)',
-                        lastMessage: '好的，沒問題！明天早上在咖啡店見。',
-                        lastTimestamp: now - 3600000
-                    },
-                    {
-                        jid: 'demo_2@s.whatsapp.net',
-                        name: 'Project Team Group (專案小組)',
-                        lastMessage: '📷 Photo Attachment: 2016_Architecture_Diagram.png',
-                        lastTimestamp: now - (dayMs * 1)
-                    },
-                    {
-                        jid: 'demo_3@s.whatsapp.net',
-                        name: 'Sarah Jenkins',
-                        lastMessage: 'Please check the extracted Android WhatsApp database archive.',
-                        lastTimestamp: now - (dayMs * 3)
-                    }
-                ];
-
-                messagesCache['demo_1@s.whatsapp.net'] = [
-                    { key_from_me: 0, data: 'Hi there! Did you successfully extract the legacy msgstore.db file from your 2016 Android phone?', timestamp: now - 7200000, media_wa_type: 0 },
-                    { key_from_me: 1, data: 'Yes! 我已經將備份檔案匯出了。內容包含英文同繁體中文訊息。', timestamp: now - 5400000, media_wa_type: 0 },
-                    { key_from_me: 0, data: 'That is great. We can read all the classic chat threads right inside Safari on iPad.', timestamp: now - 4000000, media_wa_type: 0 },
-                    { key_from_me: 1, data: '好的，沒問題！明天早上在咖啡店見。', timestamp: now - 3600000, media_wa_type: 0 }
-                ];
-
-                messagesCache['demo_2@s.whatsapp.net'] = [
-                    { key_from_me: 0, data: '歡迎大家加入 WhatsApp 2016 歷史訊息歸檔小組。', timestamp: now - (dayMs * 2), media_wa_type: 0 },
-                    { key_from_me: 0, media_wa_type: 1, media_caption: '2016_Architecture_Diagram.png', media_name: 'Diagram.png', timestamp: now - (dayMs * 1) }
-                ];
-
-                messagesCache['demo_3@s.whatsapp.net'] = [
-                    { key_from_me: 0, data: 'Hey! Here is the voice note from our last meeting.', timestamp: now - (dayMs * 4), media_wa_type: 0 },
-                    { key_from_me: 0, media_wa_type: 2, media_size: 45890, timestamp: now - (dayMs * 3.9) },
-                    { key_from_me: 1, data: 'Please check the extracted Android WhatsApp database archive.', timestamp: now - (dayMs * 3), media_wa_type: 0 }
-                ];
-
-                chatCountLabel.innerText = `${chatsData.length} Demo Chats`;
-                renderChatList(chatsData);
-
-                dropzoneScreen.classList.add('hidden');
-                uploadBtnHeader.classList.remove('hidden');
-                hideLoading();
-
-                // Auto select first chat
-                selectChatThread(chatsData[0]);
-
-            }, 400);
-        }
-
-        // Date and Time Format Helpers
-        function formatDateDivider(dateObj) {
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-
-            if (dateObj.toDateString() === today.toDateString()) return 'TODAY';
-            if (dateObj.toDateString() === yesterday.toDateString()) return 'YESTERDAY';
-
-            return dateObj.toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            });
-        }
-
-        function formatDateOrTime(timestamp) {
-            if (!timestamp) return '';
-            const msgDate = new Date(timestamp);
-            const today = new Date();
-
-            if (msgDate.toDateString() === today.toDateString()) {
-                return formatTimeOnly(timestamp);
-            }
-            return msgDate.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: '2-digit' });
-        }
-
-        function formatTimeOnly(timestamp) {
-            if (!timestamp) return '';
-            const d = new Date(timestamp);
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-
-        function escapeHtml(str) {
-            if (typeof str !== 'string') return str;
-            return str
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-    </script>
+      }
+
+      log(`Successfully extracted ${loadedChats.length} conversations.`);
+      updateProgress(100, "Done", "Rendering chat interface...");
+      
+      setTimeout(() => {
+        showLoading(false);
+        document.getElementById('welcomeScreen').style.display = 'none';
+        renderChatList(loadedChats);
+      }, 400);
+
+    } catch (err) {
+      log("QUERY ERROR: " + err.message);
+      updateProgress(0, "Query Error", err.message);
+      document.getElementById('cancelBtn').style.display = 'block';
+    }
+  }
+
+  function formatJidName(jid) {
+    if (!jid) return "Unknown";
+    let clean = jid.split('@')[0];
+    if (clean.includes('-')) return "Group (" + clean.substring(0, 8) + ")";
+    if (/^\d+$/.test(clean)) return "+" + clean;
+    return clean;
+  }
+
+  function renderChatList(chats) {
+    const container = document.getElementById('chatList');
+    container.innerHTML = '';
+
+    if (chats.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--wa-text-muted);">No messages found.</div>';
+      return;
+    }
+
+    chats.forEach(chat => {
+      const dateStr = chat.timestamp ? new Date(chat.timestamp).toLocaleDateString() : '';
+      const initial = chat.name.replace('+', '').charAt(0).toUpperCase() || '?';
+
+      const item = document.createElement('div');
+      item.className = `chat-item ${chat.jid === activeJid ? 'active' : ''}`;
+      item.onclick = () => openChat(chat);
+      item.innerHTML = `
+        <div class="avatar">${initial}</div>
+        <div class="chat-info">
+          <div class="chat-title-row">
+            <span class="chat-name">${escapeHtml(chat.name)}</span>
+            <span class="chat-time">${dateStr}</span>
+          </div>
+          <div class="chat-last-msg">${escapeHtml(chat.lastMsg)}</div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }
+
+  function openChat(chat) {
+    activeJid = chat.jid;
+    document.getElementById('activeTitle').innerText = chat.name;
+    document.getElementById('activeSubtitle').innerText = chat.jid;
+    document.getElementById('activeAvatar').innerText = chat.name.replace('+', '').charAt(0).toUpperCase() || '?';
+    document.getElementById('app').classList.add('chat-selected');
+
+    renderChatList(loadedChats);
+
+    if (!db) {
+      // Demo mode messages display
+      renderMessages(chat.demoMessages || []);
+      return;
+    }
+
+    // Query messages for selected JID
+    try {
+      const colsRes = db.exec("PRAGMA table_info(messages);");
+      const msgCols = colsRes[0].values.map(v => v[1]);
+
+      const jidCol = msgCols.includes('key_remote_jid') ? 'key_remote_jid' : 'jid';
+      const textCol = msgCols.includes('data') ? 'data' : (msgCols.includes('text_data') ? 'text_data' : 'data');
+      const timeCol = msgCols.includes('timestamp') ? 'timestamp' : 'creation_timestamp';
+      const fromMeCol = msgCols.includes('key_from_me') ? 'key_from_me' : 'from_me';
+      const typeCol = msgCols.includes('media_wa_type') ? 'media_wa_type' : 'media_type';
+
+      const typeSelect = msgCols.includes(typeCol) ? `, ${typeCol} as media_type` : `, 0 as media_type`;
+
+      const stmt = db.prepare(`
+        SELECT ${fromMeCol} as from_me, ${textCol} as body, ${timeCol} as timestamp ${typeSelect}
+        FROM messages 
+        WHERE ${jidCol} = :jid 
+        ORDER BY ${timeCol} ASC
+      `);
+
+      stmt.bind({':jid': chat.jid});
+      
+      const msgs = [];
+      while(stmt.step()) {
+        const row = stmt.getAsObject();
+        msgs.push(row);
+      }
+      stmt.free();
+
+      renderMessages(msgs);
+    } catch(err) {
+      log("Error fetching messages for " + chat.jid + ": " + err.message);
+    }
+  }
+
+  function renderMessages(msgs) {
+    const area = document.getElementById('messageArea');
+    area.innerHTML = '';
+
+    msgs.forEach(m => {
+      const isOut = m.from_me == 1;
+      const bubble = document.createElement('div');
+      bubble.className = `msg-bubble ${isOut ? 'msg-out' : 'msg-in'}`;
+
+      let mediaHtml = '';
+      if (m.media_type && m.media_type != 0) {
+        const types = {1:'📷 Photo', 2:'🎙️ Audio', 3:'🎥 Video', 4:'👤 Contact Card', 5:'📍 Location'};
+        mediaHtml = `<div class="media-badge">${types[m.media_type] || '📎 Attachment'}</div>`;
+      }
+
+      const dateStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+
+      bubble.innerHTML = `
+        ${mediaHtml}
+        <div>${escapeHtml(m.body || '')}</div>
+        <div class="msg-meta">
+          <span>${dateStr}</span>
+          ${isOut ? '<span style="color:#53bdeb;">✓✓</span>' : ''}
+        </div>
+      `;
+      area.appendChild(bubble);
+    });
+
+    area.scrollTop = area.scrollHeight;
+  }
+
+  function closeChat() {
+    document.getElementById('app').classList.remove('chat-selected');
+  }
+
+  function filterContacts() {
+    const q = document.getElementById('contactSearch').value.toLowerCase();
+    const filtered = loadedChats.filter(c => c.name.toLowerCase().includes(q) || c.jid.toLowerCase().includes(q));
+    renderChatList(filtered);
+  }
+
+  function toggleTheme() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  }
+
+  function resetApp() {
+    document.getElementById('welcomeScreen').style.display = 'flex';
+    showLoading(false);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function loadDemoData() {
+    showLoading(false);
+    document.getElementById('welcomeScreen').style.display = 'none';
+
+    loadedChats = [
+      {
+        jid: "85291234567@s.whatsapp.net",
+        name: "David (Hong Kong)",
+        timestamp: Date.now() - 3600000,
+        lastMsg: "Did you find the 2016 msgstore.db file?",
+        demoMessages: [
+          { from_me: 0, body: "Hi Calvin! Long time no see. 你好嗎？", timestamp: Date.now() - 7200000 },
+          { from_me: 1, body: "I am fine! I'm trying to open my old WhatsApp database extracted from 2016. 我正在整理舊訊息！", timestamp: Date.now() - 5400000 },
+          { from_me: 0, body: "Did you find the 2016 msgstore.db file?", timestamp: Date.now() - 3600000 }
+        ]
+      },
+      {
+        jid: "85298765432@s.whatsapp.net",
+        name: "Alice (Project Lead)",
+        timestamp: Date.now() - 86400000,
+        lastMsg: "📷 [Photo Attachment]",
+        demoMessages: [
+          { from_me: 0, media_type: 1, body: "Here is the container diagram", timestamp: Date.now() - 90000000 },
+          { from_me: 1, body: "Received, looks great! 收到，非常清晰。", timestamp: Date.now() - 86400000 }
+        ]
+      }
+    ];
+
+    renderChatList(loadedChats);
+    openChat(loadedChats[0]);
+  }
+</script>
 </body>
 </html>
